@@ -241,6 +241,41 @@ function kitmage_fluentcrm_tagger_product_cart_template( $template, $template_na
 }
 add_filter( 'wc_get_template', 'kitmage_fluentcrm_tagger_product_cart_template', 10, 2 );
 
+/** Elementor's custom cart button can render a link without a WooCommerce template. */
+function kitmage_fluentcrm_tagger_elementor_product_cart( $content, $widget ) {
+	global $product;
+	if ( is_admin() || ! function_exists( 'is_product' ) || ! is_product() ) {
+		return $content;
+	}
+	$name = $widget->get_name();
+	if ( 'wc-add-to-cart' === $name ) {
+		// This widget can target a different product, even on a product page.
+		$selected_id = $widget->get_settings_for_display( 'product_id' );
+		$product_id = empty( $selected_id ) ? get_queried_object_id() : ( is_scalar( $selected_id ) ? (int) $selected_id : 0 );
+	} elseif ( 'woocommerce-product-add-to-cart' === $name && $product ) {
+		// Elementor sets the global product while rendering, including loop items.
+		$product_id = $product->get_id();
+	} else {
+		return $content;
+	}
+	if ( (int) $product_id !== (int) get_queried_object_id() ) {
+		return $content;
+	}
+	$rule = kitmage_fluentcrm_tagger_restricted_product_rule( $product_id );
+	return null === $rule ? $content : kitmage_fluentcrm_tagger_product_message( $rule );
+}
+add_filter( 'elementor/widget/render_content', 'kitmage_fluentcrm_tagger_elementor_product_cart', 10, 2 );
+
+/** Cached Elementor widget HTML would skip the visitor's tag check entirely. */
+function kitmage_fluentcrm_tagger_elementor_product_cache( $pre_option ) {
+	if ( is_admin() || ! function_exists( 'is_product' ) || ! is_product() ) {
+		return $pre_option;
+	}
+	return null === kitmage_fluentcrm_tagger_product_rule( get_queried_object_id() ) ? $pre_option : 'disable';
+}
+// Bypass Elementor element caching for this request only; preserve the saved setting.
+add_filter( 'pre_option_elementor_element_cache_ttl', 'kitmage_fluentcrm_tagger_elementor_product_cache' );
+
 /** Support single-product block templates without replacing related product controls. */
 function kitmage_fluentcrm_tagger_product_cart_block( $content, $parsed_block, $block = null ) {
 	if ( is_admin() || ! function_exists( 'is_product' ) || ! is_product() ) {
