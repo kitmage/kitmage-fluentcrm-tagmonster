@@ -507,13 +507,19 @@ On a matching product's single-product page, logged-in visitors whose FluentCRM 
 
 **Upgrading from 1.3.0:** Existing product-ID rules continue to apply only to their original products until you explicitly replace or clear them. The settings page displays the old product ID with an empty category field. Before saving, enter a category slug for each old row you want to replace, or use **Clear rule** to delete it. Rules are not automatically expanded to categories. Version 1.4.0 also fixes valid first saves being rejected when WordPress runs the sanitizer twice: the validator now accepts its own normalized integer tag IDs.
 
-The feature supports the standard WooCommerce single-product summary, themes and page builders that load WooCommerce's simple/variable/grouped/external purchase templates through `wc_get_template()`, and the WooCommerce **Add to Cart Form** and **Add to Cart + Options** blocks. Custom themes or plugins that render their own purchase controls outside these hooks and templates may need an integration. Rules replace the whole purchase form, including variable-product selectors, with the message.
+The feature supports the standard WooCommerce single-product summary, themes and page builders that load WooCommerce's simple/variable/grouped/external purchase templates through `wc_get_template()`, Elementor's **Add To Cart** and **Custom Add To Cart** widgets, and the WooCommerce **Add to Cart Form** and **Add to Cart + Options** blocks. Elementor widgets targeting another product remain unchanged. Custom themes or plugins that render their own purchase controls outside these hooks and templates may need an integration. Rules replace the whole purchase form, including variable-product selectors, with the message.
 
 This is a product-page display feature. It does not reject direct add-to-cart requests, change shop/archive buttons, or block cart/checkout purchases. Exclude product pages in the configured categories from full-page and CDN caches because those caches may serve a page before WordPress can evaluate the visitor's tags. The plugin also sends no-cache headers for matching products, including visitors who have the required tag.
 
 ### 1.4.1
 
 Fixed saved product rules being bypassed by themes and page builders that render WooCommerce purchase templates directly instead of using the standard single-product summary hook. The saved HTML message now replaces those forms for visitors without the required tag. Forms for tagged contacts and unrelated products remain unaffected.
+
+### 1.4.2
+
+Added direct support for Elementor's **Add To Cart** and **Custom Add To Cart** widgets, including the custom widget's AJAX button that bypasses WooCommerce purchase templates. On matching product pages, the saved HTML message replaces the widget for visitors without the required tag. Tagged contacts keep the normal widget, and widgets for other products remain unchanged.
+
+Elementor element caching is bypassed on matching product pages for both allowed and restricted visitors, without changing the saved Elementor setting. After upgrading, clear Elementor's generated files/data and any page/CDN caches before testing the frontend as a guest and as contacts with and without the required tag.
 
 ### Developer checks
 
