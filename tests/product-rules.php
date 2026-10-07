@@ -29,6 +29,14 @@ function do_action( $hook ) {
 	foreach ( $priorities as $callbacks ) { foreach ( $callbacks as $callback ) { call_user_func( $callback ); } }
 }
 function add_filter( $hook, $callback, $priority = 10, $accepted_args = 1 ) { $GLOBALS['filters'][ $hook ][] = $callback; }
+function apply_filters( $hook, $value ) {
+	$args = array_slice( func_get_args(), 1 );
+	foreach ( isset( $GLOBALS['filters'][ $hook ] ) ? $GLOBALS['filters'][ $hook ] : array() as $callback ) {
+		$args[0] = $value;
+		$value = call_user_func_array( $callback, $args );
+	}
+	return $value;
+}
 function add_shortcode( $name, $callback ) {}
 function __( $text, $domain ) { return $text; }
 function get_option( $name, $default = false ) { return isset( $GLOBALS['options'][ $name ] ) ? $GLOBALS['options'][ $name ] : $default; }
@@ -96,7 +104,11 @@ class ProductRuleTestContact {
 		return array_map( function ( $id ) { return (object) array( 'id' => $id ); }, $GLOBALS['tags'] );
 	}
 }
-function woocommerce_template_single_add_to_cart() { echo '<form class="cart"><button>Add to Cart</button></form>'; }
+function wc_get_template( $template_name ) {
+	$template = apply_filters( 'wc_get_template', __DIR__ . '/fixtures/product-cart.php', $template_name );
+	include $template;
+}
+function woocommerce_template_single_add_to_cart() { wc_get_template( 'single-product/add-to-cart/simple.php' ); }
 
 require dirname( __DIR__ ) . '/kitmage-fluentcrm-tagger.php';
 $count = 0;
@@ -106,6 +118,7 @@ function check( $expected, $actual, $label ) {
 	if ( $expected !== $actual ) { fwrite( STDERR, "FAIL: $label\n" . var_export( $actual, true ) . "\n" ); exit( 1 ); }
 }
 function summary_output() { ob_start(); do_action( 'woocommerce_single_product_summary' ); return ob_get_clean(); }
+function direct_cart_output( $template_name ) { ob_start(); wc_get_template( $template_name ); return ob_get_clean(); }
 function reset_summary() {
 	$GLOBALS['actions']['woocommerce_single_product_summary'] = array();
 	add_action( 'woocommerce_single_product_summary', 'woocommerce_template_single_add_to_cart', 30 );
@@ -135,6 +148,7 @@ if ( in_array( '--without-woocommerce', $argv, true ) ) {
 	kitmage_fluentcrm_tagger_prepare_product_rule();
 	check( $cart, summary_output(), 'Missing WooCommerce is harmless' );
 	check( $cart, filtered_cart_block( 'woocommerce/add-to-cart-form', $cart ), 'No block changes without WooCommerce' );
+	check( $cart, direct_cart_output( 'single-product/add-to-cart/simple.php' ), 'No direct cart changes without WooCommerce' );
 	check( array( $saved_rule ), kitmage_fluentcrm_tagger_sanitize_product_rules( array( $rule ) ), 'Existing settings retained without WooCommerce' );
 	check( 'invalid_product_rule', end( $GLOBALS['errors'] ), 'Missing WooCommerce validation error' );
 	check( array(), kitmage_fluentcrm_tagger_sanitize_product_rules( array() ), 'Rules can be removed without WooCommerce' );
@@ -147,6 +161,12 @@ kitmage_fluentcrm_tagger_prepare_product_rule();
 check( $message, summary_output(), 'Missing tag replaces entire cart form' );
 check( true, defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE, 'Disable page caching' );
 check( 1, $GLOBALS['no_cache'], 'Send no-cache headers' );
+// Builders may call the cart template without using woocommerce_single_product_summary.
+foreach ( array( 'simple', 'variable', 'grouped', 'external' ) as $type ) {
+	check( $message, direct_cart_output( 'single-product/add-to-cart/' . $type . '.php' ), 'Direct ' . $type . ' form replaced for missing tag' );
+}
+check( $cart, direct_cart_output( 'single-product/add-to-cart/variation-add-to-cart-button.php' ), 'Nested variation fragment untouched' );
+check( $cart, direct_cart_output( 'single-product/price.php' ), 'Unrelated template untouched' );
 foreach ( array( 'woocommerce/add-to-cart-form', 'woocommerce/add-to-cart-with-options' ) as $block_name ) {
 	check( $message, filtered_cart_block( $block_name, $cart ), 'Replace purchase block ' . $block_name );
 	check( $cart, filtered_cart_block( $block_name, $cart, 456 ), 'Related product block untouched ' . $block_name );
@@ -222,6 +242,7 @@ $GLOBALS['tags'] = array( 26 );
 reset_summary();
 kitmage_fluentcrm_tagger_prepare_product_rule();
 check( $cart, summary_output(), 'Required tag retains normal cart' );
+check( $cart, direct_cart_output( 'single-product/add-to-cart/simple.php' ), 'Direct cart retained for allowed contact' );
 check( 2, $GLOBALS['no_cache'], 'Allowed contact output also uncacheable' );
 check( $cart, filtered_cart_block( 'woocommerce/add-to-cart-with-options', $cart ), 'Required tag retains purchase block' );
 $GLOBALS['tags'] = array( 99 );
@@ -229,6 +250,7 @@ check( $saved_rule, kitmage_fluentcrm_tagger_restricted_product_rule( 123 ), 'Di
 $GLOBALS['tags'] = array( 26 );
 $GLOBALS['logged_in'] = false;
 check( $saved_rule, kitmage_fluentcrm_tagger_restricted_product_rule( 123 ), 'Guest gets message' );
+check( $message, direct_cart_output( 'single-product/add-to-cart/simple.php' ), 'Direct cart replaced for guest' );
 $GLOBALS['logged_in'] = true;
 foreach ( array( 'missing_contact', 'lookup_error', 'tags_error' ) as $failure ) {
 	$GLOBALS[ $failure ] = true;
@@ -249,11 +271,13 @@ $GLOBALS['product'] = new ProductRuleTestProduct( 123 );
 $GLOBALS['admin'] = true;
 reset_summary(); kitmage_fluentcrm_tagger_prepare_product_rule();
 check( $cart, summary_output(), 'Admin request untouched' );
+check( $cart, direct_cart_output( 'single-product/add-to-cart/simple.php' ), 'Direct admin cart untouched' );
 check( $cart, filtered_cart_block( 'woocommerce/add-to-cart-form', $cart ), 'Admin blocks untouched' );
 $GLOBALS['admin'] = false;
 $GLOBALS['product_page'] = false;
 reset_summary(); kitmage_fluentcrm_tagger_prepare_product_rule();
 check( $cart, summary_output(), 'Archives untouched' );
+check( $cart, direct_cart_output( 'single-product/add-to-cart/simple.php' ), 'Direct archive cart untouched' );
 check( $cart, filtered_cart_block( 'woocommerce/add-to-cart-form', $cart ), 'Archive blocks untouched' );
 $GLOBALS['product_page'] = true;
 $GLOBALS['queried_id'] = 456;
@@ -264,6 +288,9 @@ $GLOBALS['queried_id'] = 123;
 reset_summary(); kitmage_fluentcrm_tagger_prepare_product_rule();
 $GLOBALS['product'] = new ProductRuleTestProduct( 456 );
 check( '', summary_output(), 'Message not printed for a different global product' );
+check( $cart, direct_cart_output( 'single-product/add-to-cart/simple.php' ), 'Direct related product cart untouched' );
+$GLOBALS['product'] = null;
+check( $cart, direct_cart_output( 'single-product/add-to-cart/simple.php' ), 'Direct cart without a product is harmless' );
 $GLOBALS['product'] = new ProductRuleTestProduct( 123 );
 
 $GLOBALS['can_manage'] = false;
@@ -301,8 +328,10 @@ $GLOBALS['tags'] = array();
 $_GET = array( 'fcrm_tag' => '26' );
 reset_summary(); do_action( 'template_redirect' );
 check( $cart, summary_output(), 'Adding required tag in this request keeps the cart form' );
+check( $cart, direct_cart_output( 'single-product/add-to-cart/simple.php' ), 'Direct cart sees tag added in this request' );
 $_GET = array( 'fcrm_untag' => '26' );
 reset_summary(); do_action( 'template_redirect' );
 check( $message, summary_output(), 'Removing required tag in this request replaces the cart form' );
+check( $message, direct_cart_output( 'single-product/add-to-cart/simple.php' ), 'Direct cart sees tag removed in this request' );
 $_GET = array();
 echo "Passed $count product-rule checks.\n";

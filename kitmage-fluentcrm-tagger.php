@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       KitMage FluentCRM Tagger
  * Description:       Adds/removes FluentCRM tags for logged-in contacts and provides tag-aware links and shortcodes.
- * Version:           1.4.0
+ * Version:           1.4.1
  * Requires at least: 5.2
  * Requires PHP:      7.0
  * Author: Mike@KitMage
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 
 if ( ! defined( 'KITMAGE_FLUENTCRM_TAGGER_VERSION' ) ) {
-	define( 'KITMAGE_FLUENTCRM_TAGGER_VERSION', '1.3.0' );
+	define( 'KITMAGE_FLUENTCRM_TAGGER_VERSION', '1.4.1' );
 }
 
 /**
