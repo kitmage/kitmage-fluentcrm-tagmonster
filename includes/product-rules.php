@@ -219,6 +219,28 @@ function kitmage_fluentcrm_tagger_render_product_message() {
 	}
 }
 
+/** Also replace forms rendered directly by themes and page-builder widgets. */
+function kitmage_fluentcrm_tagger_product_cart_template( $template, $template_name ) {
+	global $product;
+	if ( is_admin() || ! function_exists( 'is_product' ) || ! is_product() ) {
+		return $template;
+	}
+	$cart_templates = array(
+		'single-product/add-to-cart/simple.php',
+		'single-product/add-to-cart/variable.php',
+		'single-product/add-to-cart/grouped.php',
+		'single-product/add-to-cart/external.php',
+	);
+	if ( ! in_array( $template_name, $cart_templates, true ) || ! $product || (int) $product->get_id() !== (int) get_queried_object_id() ) {
+		return $template;
+	}
+	if ( null === kitmage_fluentcrm_tagger_restricted_product_rule( $product->get_id() ) ) {
+		return $template;
+	}
+	return __DIR__ . '/templates/product-tag-message.php';
+}
+add_filter( 'wc_get_template', 'kitmage_fluentcrm_tagger_product_cart_template', 10, 2 );
+
 /** Support single-product block templates without replacing related product controls. */
 function kitmage_fluentcrm_tagger_product_cart_block( $content, $parsed_block, $block = null ) {
 	if ( is_admin() || ! function_exists( 'is_product' ) || ! is_product() ) {
